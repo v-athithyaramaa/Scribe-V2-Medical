@@ -222,7 +222,7 @@ export function matchSyndrome(text: string): ClinicalSyndrome {
   // 2. Knee Injury: ACL Tear / Meniscal Tear / Ligament Sprain
   if (
     (lower.includes('knee') || lower.includes('lachman') || lower.includes('anterior drawer') || lower.includes('mcmurray')) &&
-    (lower.includes('pop') || lower.includes('acl') || lower.includes('tear') || lower.includes('sprain') || lower.includes('meniscus') || lower.includes('ligament') || lower.includes('cutting') || lower.includes('hemarthrosis'))
+    (/\b(?:pop|popped|popping)\b/i.test(text) || lower.includes('acl') || lower.includes('tear') || lower.includes('sprain') || lower.includes('meniscus') || lower.includes('ligament') || lower.includes('cutting') || lower.includes('hemarthrosis'))
   ) {
     const isRight = lower.includes('right') || !lower.includes('left');
     const primaryCode = isRight ? 'S83.511A' : 'S83.512A';
@@ -335,7 +335,7 @@ export function matchSyndrome(text: string): ClinicalSyndrome {
   }
 
   // 5. Acute Otitis Media / Ear Infection
-  if (lower.includes('ear') || lower.includes('otitis') || lower.includes('tympanic') || lower.includes('otalgia')) {
+  if (/\b(?:ear pain|ears|otitis|tympanic|otalgia|earache|middle ear)\b/i.test(text)) {
     return {
       name: 'Acute Otitis Media (AOM)',
       differentials: ['Otitis media with effusion (OME)', 'Otitis externa ("swimmer’s ear")', 'Eustachian tube dysfunction', 'Temporomandibular joint (TMJ) arthralgia / referred dental pain', 'Mastoiditis'],
