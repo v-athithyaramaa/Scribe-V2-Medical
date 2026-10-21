@@ -40,7 +40,7 @@ export function parseEncounter(input: string): ParsedEncounter {
   const durMatch =
     text.match(/(?:for|duration of|onset|past|history of|x)\s*(\d+\s*(?:minutes?|hours?|hrs?|days?|weeks?|wks?|months?|mos?|years?|yrs?))/i) ||
     text.match(/(\d+[- ](?:hour|day|week|month|year))\s*(?:history|duration)/i);
-  const duration = durMatch ? durMatch[1] : 'current encounter timeline';
+  const duration = durMatch ? durMatch[1] : 'acute encounter timeline';
 
   // 3. Chief Complaint Extraction
   const ccMatch =
@@ -82,6 +82,12 @@ export function parseEncounter(input: string): ParsedEncounter {
     const slrMatch = text.match(/(?:straight leg raise|slr)[^.,;\n]*/i);
     examFindings.push(slrMatch ? slrMatch[0].trim() : 'Straight Leg Raise (SLR) positive');
   }
+  if (lower.includes('lachman') || lower.includes('anterior drawer') || lower.includes('mcmurray')) {
+    examFindings.push('Knee examination: Positive Lachman / Anterior Drawer test indicating cruciate ligament disruption');
+  }
+  if (lower.includes('stridor') || lower.includes('barking')) {
+    examFindings.push('Respiratory exam: Inspiratory stridor and characteristic barking cough noted on auscultation');
+  }
   if (lower.includes('wheez')) {
     const wMatch = text.match(/[^.,;\n]*wheez[^.,;\n]*/i);
     examFindings.push(wMatch ? wMatch[0].trim() : 'Expiratory wheezes on auscultation');
@@ -89,22 +95,28 @@ export function parseEncounter(input: string): ParsedEncounter {
   if (lower.includes('crackles') || lower.includes('rales')) {
     examFindings.push('Inspiratory crackles / rales auscultated in lung fields');
   }
+  if (lower.includes('exudate') || (lower.includes('tonsil') && lower.includes('swollen'))) {
+    examFindings.push('Oropharyngeal examination: Bilateral tonsillar enlargement with follicular purulent exudates');
+  }
+  if (lower.includes('tympanic') || lower.includes('bulging tm') || lower.includes('erythematous tm')) {
+    examFindings.push('Otoscopic examination: Erythematous, bulging tympanic membrane with obscured light reflex');
+  }
   if (lower.includes('tenderness') || lower.includes('tender')) {
     const tMatch = text.match(/[^.,;\n]*tender[^.,;\n]*/i);
     examFindings.push(tMatch ? tMatch[0].trim() : 'Focal localized tenderness elicited on palpation');
   }
   if (lower.includes('mcburney') || lower.includes('rebound') || lower.includes('guarding')) {
-    examFindings.push('Peritoneal signs: focal tenderness at McBurney point / guarding elicited');
+    examFindings.push('Peritoneal signs: focal tenderness at McBurney point with rebound tenderness / involuntary guarding');
   }
   if (lower.includes('murphy')) {
-    examFindings.push('Murphy sign positive over right upper quadrant');
+    examFindings.push('Murphy sign positive over right upper quadrant during inspiratory arrest');
   }
-  if (lower.includes('swelling') || lower.includes('edema')) {
-    const sMatch = text.match(/[^.,;\n]*(?:swelling|edema)[^.,;\n]*/i);
-    examFindings.push(sMatch ? sMatch[0].trim() : 'Localized soft tissue swelling/edema noted');
+  if (lower.includes('swelling') || lower.includes('edema') || lower.includes('effusion') || lower.includes('hemarthrosis')) {
+    const sMatch = text.match(/[^.,;\n]*(?:swelling|edema|effusion|hemarthrosis)[^.,;\n]*/i);
+    examFindings.push(sMatch ? sMatch[0].trim() : 'Localized soft tissue swelling / joint effusion noted');
   }
   if (lower.includes('monofilament') || lower.includes('vibratory') || lower.includes('paresthesia')) {
-    examFindings.push('Decreased 10g monofilament perception and distal vibratory loss');
+    examFindings.push('Neurological exam: Decreased 10g monofilament perception and distal vibratory sensation loss');
   }
   if (lower.includes('reflex')) {
     const rMatch = text.match(/[^.,;\n]*reflex[^.,;\n]*/i);
@@ -114,7 +126,7 @@ export function parseEncounter(input: string): ParsedEncounter {
     examFindings.push('Diaphoresis and autonomic distress observed');
   }
   if (lower.includes('retraction')) {
-    examFindings.push('Accessory muscle use with intercostal/subcostal retractions');
+    examFindings.push('Accessory respiratory muscle use with intercostal/subcostal retractions');
   }
 
   // 7. General Positives
@@ -137,7 +149,9 @@ export function parseEncounter(input: string): ParsedEncounter {
         s.toLowerCase().includes('nausea') ||
         s.toLowerCase().includes('rash') ||
         s.toLowerCase().includes('weakness') ||
-        s.toLowerCase().includes('dysuria')
+        s.toLowerCase().includes('dysuria') ||
+        s.toLowerCase().includes('pop') ||
+        s.toLowerCase().includes('stridor')
       ) {
         positives.push(s);
       }
@@ -166,7 +180,7 @@ interface ClinicalSyndrome {
   redFlags: string[];
 }
 
-function matchSyndrome(text: string): ClinicalSyndrome {
+export function matchSyndrome(text: string): ClinicalSyndrome {
   const lower = text.toLowerCase();
 
   // 1. Lumbar Radiculopathy / Sciatica / Herniated Disc
@@ -205,35 +219,174 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 2. Acute Lumbar Strain / Mechanical Low Back Pain
-  if (lower.includes('back') || lower.includes('lumbar') || lower.includes('lumbago') || lower.includes('lifting')) {
+  // 2. Knee Injury: ACL Tear / Meniscal Tear / Ligament Sprain
+  if (
+    (lower.includes('knee') || lower.includes('lachman') || lower.includes('anterior drawer') || lower.includes('mcmurray')) &&
+    (lower.includes('pop') || lower.includes('acl') || lower.includes('tear') || lower.includes('sprain') || lower.includes('meniscus') || lower.includes('ligament') || lower.includes('cutting') || lower.includes('hemarthrosis'))
+  ) {
+    const isRight = lower.includes('right') || !lower.includes('left');
+    const primaryCode = isRight ? 'S83.511A' : 'S83.512A';
+    const primaryTitle = isRight
+      ? 'Sprain of anterior cruciate ligament of right knee, initial encounter'
+      : 'Sprain of anterior cruciate ligament of left knee, initial encounter';
+
     return {
-      name: 'Acute Lumbar Musculoskeletal Strain (Mechanical Low Back Pain)',
+      name: 'Anterior Cruciate Ligament (ACL) Rupture / Acute Meniscal Tear',
       differentials: [
-        'Lumbar disc herniation without radiculopathy',
-        'Facet joint arthropathy',
-        'Vertebral compression fracture (if osteoporosis/trauma)',
-        'Nephrolithiasis / Pyelonephritis (referred flank pain)',
+        'Medial collateral ligament (MCL) sprain',
+        'Acute medial or lateral meniscal tear',
+        'Posterior cruciate ligament (PCL) injury',
+        'Patellar subluxation / dislocation',
+        'Tibial plateau fracture (occult bony injury)',
       ],
       icdCodes: [
-        { code: 'M54.50', title: 'Low back pain, unspecified', rule: 'Standard code for acute uncomplicated mechanical back pain.' },
-        { code: 'S39.012A', title: 'Strain of muscle, fascia and tendon of lower back, initial encounter', rule: 'Applicable when onset is directly related to acute exertion/strain.' },
+        { code: primaryCode, title: primaryTitle, rule: 'Primary diagnostic code for acute ACL tear initial encounter.' },
+        { code: 'M23.20', title: 'Derangement of meniscus due to old tear or injury, unspecified knee', rule: 'Co-morbid or secondary diagnostic code for suspected meniscal pathology.' },
+        { code: 'M25.461', title: 'Effusion, right knee', rule: 'Symptom code for acute traumatic hemarthrosis.' },
       ],
       diagnostics: [
-        'Imaging not routinely indicated for acute back strain without red flags.',
-        'Lumbar radiographs only if significant trauma, osteoporosis, or focal bony tenderness.',
+        'Targeted 4-view Knee Radiographs (AP, lateral, tunnel, sunrise) to rule out tibial spine avulsion or Segond fracture.',
+        'Non-contrast MRI of the affected knee (definitive gold standard for ligamentous and meniscal evaluation).',
       ],
       medications: [
-        'Oral NSAIDs (Ibuprofen 600 mg PO TID or Naproxen 500 mg PO BID) with meals.',
-        'Topical analgesics (Lidocaine 4% patch or topical Diclofenac gel).',
-        'Early gentle mobilization; avoid prolonged strict bed rest.',
+        'R.I.C.E. protocol: Rest, Ice application 20 min Q2-3H, Compression bandage, and Elevation.',
+        'Oral NSAIDs: Meloxicam 15 mg PO daily or Ibuprofen 600 mg PO TID with meals for acute anti-inflammatory relief.',
+        'Knee immobilizer or hinged knee brace locked in extension for acute joint stabilization.',
       ],
-      precautions: 'Proper lifting mechanics (bend at knees); avoid heavy axial spine loading.',
-      redFlags: ['Radiation below knee', 'Numbness/weakness in legs', 'Bowel or bladder dysfunction', 'Fever or unexplained weight loss'],
+      precautions: 'Strict non-weight-bearing (NWB) with crutches until orthopedic evaluation.',
+      redFlags: [
+        'Inability to bear any weight with severe bony tenderness (Ottawa Knee Rules)',
+        'Foot or toe numbness / coldness / absent distal pedal pulses (popliteal artery injury)',
+        'Rapidly expanding tense effusion or inability to reduce locked knee',
+      ],
     };
   }
 
-  // 3. Acute Appendicitis / Acute Abdomen
+  // 3. Pediatric Croup / Acute Laryngotracheobronchitis
+  if (lower.includes('croup') || lower.includes('barking') || lower.includes('stridor') || lower.includes('laryngotracheo')) {
+    return {
+      name: 'Acute Laryngotracheobronchitis (Croup)',
+      differentials: [
+        'Acute epiglottitis (bacterial emergency with drooling/tripoding)',
+        'Foreign body airway aspiration',
+        'Bacterial tracheitis',
+        'Peritonsillar / retropharyngeal abscess',
+        'Spasmodic croup',
+      ],
+      icdCodes: [
+        { code: 'J05.0', title: 'Acute obstructive laryngitis [croup]', rule: 'Primary code for viral subglottic airway narrowing.' },
+        { code: 'R06.1', title: 'Stridor', rule: 'Symptom code for upper airway inspiratory noise.' },
+        { code: 'R05.9', title: 'Cough, unspecified', rule: 'Associated symptom code.' },
+      ],
+      diagnostics: [
+        'Clinical diagnosis based on classic barking cough and stridor; avoid agitating child with painful procedures.',
+        'Soft tissue neck radiography (AP view) shows classic subglottic narrowing ("steeple sign") if diagnostic uncertainty exists.',
+        'Continuous pulse oximetry monitoring for hypoxemia.',
+      ],
+      medications: [
+        'Oral Dexamethasone 0.6 mg/kg single dose (max 16 mg) PO/IM (first-line treatment to reduce subglottic edema).',
+        'Nebulized Racemic Epinephrine (0.5 mL of 2.25% solution in 3 mL NS) if stridor at rest or moderate-to-severe retractions present.',
+        'Cool humidified air or mist therapy for symptomatic comfort.',
+      ],
+      precautions: 'Keep patient calm in caregiver’s arms. Observe for at least 2–4 hours post-epinephrine for rebound symptoms.',
+      redFlags: [
+        'Inability to swallow, drooling, or toxic appearance (concerning for Epiglottitis)',
+        'Stridor worsening at rest, marked sternal/subcostal retractions, or cyanosis',
+        'Lethargy or decreased responsiveness indicating respiratory exhaustion',
+      ],
+    };
+  }
+
+  // 4. Acute Pharyngitis / Streptococcal Tonsillitis
+  if (
+    lower.includes('throat') || lower.includes('pharyngitis') || lower.includes('tonsil') || lower.includes('tonsillitis') || lower.includes('strep')
+  ) {
+    return {
+      name: 'Acute Pharyngitis / Acute Streptococcal Tonsillitis',
+      differentials: [
+        'Group A Streptococcus (GAS) pyogenes pharyngitis',
+        'Infectious mononucleosis (Epstein-Barr Virus)',
+        'Viral pharyngitis (Adenovirus, Enterovirus, Rhinovirus)',
+        'Peritonsillar abscess (Quinsy)',
+        'Herpangina / Coxsackievirus',
+      ],
+      icdCodes: [
+        { code: 'J02.0', title: 'Streptococcal pharyngitis', rule: 'Use if Rapid Strep Antigen Test or throat culture is positive.' },
+        { code: 'J02.9', title: 'Acute pharyngitis, unspecified', rule: 'Initial presentation code before microbiological confirmation.' },
+        { code: 'J03.90', title: 'Acute tonsillitis, unspecified', rule: 'Secondary code if marked tonsillar exudates are present.' },
+      ],
+      diagnostics: [
+        'Centor / McIsaac Clinical Scoring Criteria assessment.',
+        'Point-of-care Rapid Antigen Detection Test (RADT) for Group A Streptococcus with backup throat culture in children.',
+        'Heterophile antibody test (Monospot) if splenomegaly, prominent posterior cervical adenopathy, or prolonged fatigue.',
+      ],
+      medications: [
+        'First-line antibiotic if GAS confirmed: Amoxicillin 500 mg PO BID (or 50 mg/kg/day in children) x 10 days (or Penicillin V).',
+        'Alternative in penicillin allergy: Cephalexin 500 mg PO BID or Azithromycin 500 mg day 1, then 250 mg daily x 4 days.',
+        'Analgesia: Ibuprofen 400-600 mg PO Q6H PRN or Acetaminophen 650 mg PO Q6H PRN with warm saline gargles.',
+      ],
+      precautions: 'Discard or sanitize toothbrush 24 hours after initiating antibiotics; avoid contact sports if mononucleosis suspected.',
+      redFlags: [
+        'Trismus (inability to open mouth) or uvular deviation (indicates Peritonsillar Abscess)',
+        'Difficulty swallowing liquids or drooling / muffled "hot potato" voice',
+        'Stridor, neck swelling, or respiratory distress',
+      ],
+    };
+  }
+
+  // 5. Acute Otitis Media / Ear Infection
+  if (lower.includes('ear') || lower.includes('otitis') || lower.includes('tympanic') || lower.includes('otalgia')) {
+    return {
+      name: 'Acute Otitis Media (AOM)',
+      differentials: ['Otitis media with effusion (OME)', 'Otitis externa ("swimmer’s ear")', 'Eustachian tube dysfunction', 'Temporomandibular joint (TMJ) arthralgia / referred dental pain', 'Mastoiditis'],
+      icdCodes: [
+        { code: 'H66.90', title: 'Otitis media, unspecified, unspecified ear', rule: 'Standard outpatient diagnostic code.' },
+        { code: 'H92.01', title: 'Otalgia, right ear', rule: 'Symptom code for right ear pain.' },
+        { code: 'H92.02', title: 'Otalgia, left ear', rule: 'Symptom code for left ear pain.' },
+      ],
+      diagnostics: ['Pneumatic otoscopy verifying tympanic membrane mobility, erythema, and purulent effusion.', 'Inspection of mastoid process for post-auricular erythema or tenderness.'],
+      medications: [
+        'First-line antibiotic therapy: High-dose Amoxicillin 80-90 mg/kg/day PO divided BID (pediatrics) or 875 mg PO BID (adults) x 7-10 days.',
+        'Alternative for beta-lactamase resistance: Amoxicillin-Clavulanate (Augmentin) 90 mg/kg/day divided BID.',
+        'Systemic analgesia: Oral Ibuprofen or Acetaminophen for otalgia control.',
+      ],
+      precautions: 'Keep ears dry; avoid swimming during acute suppurative phase; schedule 2-week follow-up for resolution of middle ear effusion.',
+      redFlags: ['Post-auricular erythema, swelling, or forward displacement of pinna (Mastoiditis)', 'Facial nerve weakness or vertigo', 'Lethargy or high fever in infants < 6 months'],
+    };
+  }
+
+  // 6. Acute Coronary Syndrome / Angina / Chest Pain
+  if (lower.includes('chest') || lower.includes('angina') || lower.includes('substernal') || lower.includes('coronary') || lower.includes('myocardial')) {
+    return {
+      name: 'Acute Coronary Syndrome (ACS) Rule-Out / Angina Pectoris',
+      differentials: [
+        'Acute Myocardial Infarction (STEMI vs NSTEMI)',
+        'Aortic dissection (tearing chest pain radiating to back)',
+        'Pulmonary embolism (pleuritic pain, hypoxia)',
+        'Gastroesophageal reflux / Esophageal spasm',
+        'Musculoskeletal costochondritis',
+      ],
+      icdCodes: [
+        { code: 'I20.9', title: 'Angina pectoris, unspecified', rule: 'Appropriate for exertional chest tightness pending cardiac enzymes.' },
+        { code: 'R07.9', title: 'Chest pain, unspecified', rule: 'Initial presentation symptom code.' },
+        { code: 'I21.9', title: 'Acute myocardial infarction, unspecified', rule: 'Assign if high-sensitivity troponin demonstrates rise and fall pattern.' },
+      ],
+      diagnostics: [
+        'Immediate 12-lead Electrocardiogram (ECG) performed within 10 minutes of arrival.',
+        'Serial High-Sensitivity Cardiac Troponins (0h, 1h/3h rapid rule-out protocol).',
+        'Chest radiograph (PA and Lateral) to rule out pneumothorax or mediastinal widening.',
+      ],
+      medications: [
+        'Aspirin 324 mg chewable PO immediately.',
+        'Sublingual Nitroglycerin 0.4 mg every 5 minutes (up to 3 doses) if SBP > 100 mmHg.',
+        'Supplemental Oxygen only if SpO2 < 90%.',
+      ],
+      precautions: 'Continuous cardiac telemetry monitoring and urgent Cardiology evaluation.',
+      redFlags: ['Radiation of tightness to jaw, neck, or left arm', 'Diaphoresis, syncope, or profound shortness of breath', 'Hypotension or new cardiac murmur'],
+    };
+  }
+
+  // 7. Acute Appendicitis / Acute Abdomen
   if (
     lower.includes('appendic') ||
     lower.includes('mcburney') ||
@@ -266,7 +419,7 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 4. Acute Cholecystitis / Biliary Colic
+  // 8. Acute Cholecystitis / Biliary Colic
   if (lower.includes('cholecyst') || lower.includes('gallbladder') || lower.includes('gallstone') || lower.includes('ruq') || lower.includes('right upper') || lower.includes('murphy')) {
     return {
       name: 'Acute Cholecystitis / Symptomatic Cholelithiasis',
@@ -282,38 +435,7 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 5. Acute Coronary Syndrome / Angina / Chest Pain
-  if (lower.includes('chest') || lower.includes('angina') || lower.includes('substernal') || lower.includes('coronary') || lower.includes('myocardial')) {
-    return {
-      name: 'Acute Coronary Syndrome (ACS) Rule-Out / Angina Pectoris',
-      differentials: [
-        'Acute Myocardial Infarction (STEMI vs NSTEMI)',
-        'Aortic dissection (tearing chest pain radiating to back)',
-        'Pulmonary embolism (pleuritic pain, hypoxia)',
-        'Gastroesophageal reflux / Esophageal spasm',
-        'Musculoskeletal costochondritis',
-      ],
-      icdCodes: [
-        { code: 'I20.9', title: 'Angina pectoris, unspecified', rule: 'Appropriate for exertional chest tightness pending cardiac enzymes.' },
-        { code: 'R07.9', title: 'Chest pain, unspecified', rule: 'Initial presentation symptom code.' },
-        { code: 'I21.9', title: 'Acute myocardial infarction, unspecified', rule: 'Assign if high-sensitivity troponin demonstrates rise and fall pattern.' },
-      ],
-      diagnostics: [
-        'Immediate 12-lead Electrocardiogram (ECG) performed within 10 minutes of arrival.',
-        'Serial High-Sensitivity Cardiac Troponins (0h, 1h/3h rapid rule-out protocol).',
-        'Chest radiograph (PA and Lateral) to rule out pneumothorax or mediastinal widening.',
-      ],
-      medications: [
-        'Aspirin 324 mg chewable PO immediately.',
-        'Sublingual Nitroglycerin 0.4 mg every 5 minutes (up to 3 doses) if SBP > 100 mmHg.',
-        'Supplemental Oxygen only if SpO2 < 90%.',
-      ],
-      precautions: 'Continuous cardiac telemetry monitoring and urgent Cardiology evaluation.',
-      redFlags: ['Radiation of tightness to jaw, neck, or left arm', 'Diaphoresis, syncope, or profound shortness of breath', 'Hypotension or new cardiac murmur'],
-    };
-  }
-
-  // 6. Community-Acquired Pneumonia / Bacterial Lower Respiratory Infection
+  // 9. Community-Acquired Pneumonia / Bacterial Lower Respiratory Infection
   if ((lower.includes('pneumon') || (lower.includes('cough') && lower.includes('sputum'))) && (lower.includes('fever') || lower.includes('crackles') || lower.includes('consolidation'))) {
     return {
       name: 'Community-Acquired Pneumonia (CAP)',
@@ -332,7 +454,7 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 7. Acute Asthma Exacerbation / Bronchospasm
+  // 10. Acute Asthma Exacerbation / Bronchospasm
   if (lower.includes('asthma') || lower.includes('wheez') || lower.includes('bronchospasm') || lower.includes('albuterol')) {
     return {
       name: 'Acute Asthma Exacerbation with Bronchospasm',
@@ -351,7 +473,28 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 8. Urinary Tract Infection / Cystitis / Dysuria
+  // 11. Nephrolithiasis / Renal Colic / Kidney Stones
+  if (lower.includes('stone') || lower.includes('nephrolithiasis') || lower.includes('renal colic') || (lower.includes('flank') && lower.includes('pain'))) {
+    return {
+      name: 'Acute Nephrolithiasis / Renal Colic',
+      differentials: ['Acute pyelonephritis', 'Abdominal aortic aneurysm (AAA) rupture', 'Musculoskeletal lumbar strain', 'Renal infarction'],
+      icdCodes: [
+        { code: 'N20.0', title: 'Calculus of kidney', rule: 'Primary code for nephrolithiasis.' },
+        { code: 'N23', title: 'Unspecified renal colic', rule: 'Symptom code for severe spasmodic flank pain.' },
+        { code: 'R31.9', title: 'Hematuria, unspecified', rule: 'Associated microscopic or macroscopic urinary finding.' },
+      ],
+      diagnostics: ['Non-contrast Low-Dose CT of Abdomen and Pelvis (gold standard)', 'Urinalysis with microscopy evaluating for hematuria, crystals, and infection markers', 'Serum BUN, Creatinine, and electrolytes.'],
+      medications: [
+        'First-line IV/oral NSAID: Ketorolac 15–30 mg IV or Ibuprofen 800 mg PO (relaxes ureteral smooth muscle).',
+        'Medical expulsive therapy: Tamsulosin 0.4 mg PO daily at bedtime (facilitates stone passage if <= 6 mm).',
+        'Antiemetic: Ondansetron 4 mg IV/PO PRN nausea.',
+      ],
+      precautions: 'Strain all urine through a fine filter and bring captured calculus for laboratory stone composition analysis.',
+      redFlags: ['Fever > 100.4 F or chills with obstructive stone (infected hydronephrosis is a surgical emergency)', 'Anuria or acute renal failure', 'Intractable nausea and vomiting preventing oral hydration'],
+    };
+  }
+
+  // 12. Urinary Tract Infection / Cystitis / Dysuria
   if (lower.includes('dysuria') || lower.includes('uti') || lower.includes('urinary') || lower.includes('frequency') || lower.includes('cystitis') || lower.includes('burning urine')) {
     return {
       name: 'Acute Uncomplicated Cystitis (Urinary Tract Infection)',
@@ -371,7 +514,28 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 9. Migraine with/without Aura / Acute Headache
+  // 13. Acute Gastroenteritis / Dehydration
+  if (lower.includes('diarrhea') || lower.includes('vomiting') || lower.includes('gastroenteritis') || lower.includes('nausea') && lower.includes('stool')) {
+    return {
+      name: 'Acute Viral / Infectious Gastroenteritis',
+      differentials: ['Bacterial enteritis (Campylobacter, Salmonella, Shigella, E. coli)', 'Clostridioides difficile colitis (if antibiotic exposure)', 'Foodborne illness / Toxin-mediated ingestion', 'Inflammatory bowel disease initial presentation'],
+      icdCodes: [
+        { code: 'A09', title: 'Infectious gastroenteritis and colitis, unspecified', rule: 'Standard diagnosis code for acute gastroenteritis.' },
+        { code: 'R11.2', title: 'Nausea with vomiting, unspecified', rule: 'Symptom code.' },
+        { code: 'E86.0', title: 'Dehydration', rule: 'Associated metabolic condition if hypovolemic.' },
+      ],
+      diagnostics: ['Basic Metabolic Panel (BMP) to evaluate BUN/Creatinine ratio and serum electrolytes', 'Stool multiplex PCR panel and fecal occult blood if bloody stools, high fever, or > 7 days duration.'],
+      medications: [
+        'Oral Rehydration Salts (ORS) solution; sip 5–10 mL every 5 minutes as tolerated.',
+        'Antiemetic: Ondansetron 4–8 mg PO ODT Q8H PRN nausea.',
+        'Avoid antimotility agents (Loperamide) if bloody diarrhea or high fever present.',
+      ],
+      precautions: 'Strict hand hygiene with soap and water; avoid dairy, caffeine, and high-fat foods until bowel habits normalize.',
+      redFlags: ['Inability to retain liquids for > 12 hours with orthostatic lightheadedness or dark concentrated urine', 'Gross bloody / black tarry stools', 'Severe unremitting localized abdominal pain'],
+    };
+  }
+
+  // 14. Migraine with/without Aura / Acute Headache
   if (lower.includes('migraine') || lower.includes('headache') || lower.includes('throbbing') || lower.includes('photophobia')) {
     return {
       name: 'Migraine without Aura (Acute Episode) vs Tension-Type Headache',
@@ -395,80 +559,101 @@ function matchSyndrome(text: string): ClinicalSyndrome {
     };
   }
 
-  // 10. Type 2 Diabetes with Peripheral Neuropathy
+  // 15. Type 2 Diabetes with Peripheral Neuropathy
   if (lower.includes('diabet') || lower.includes('neuropathy') || lower.includes('burning foot') || lower.includes('glucose') || lower.includes('a1c')) {
     return {
       name: 'Type 2 Diabetes Mellitus with Diabetic Peripheral Neuropathy',
-      differentials: [
-        'Vitamin B12 deficiency neuropathy',
-        'Chronic inflammatory demyelinating polyneuropathy (CIDP)',
-        'Alcohol-related neuropathy',
-        'Hypothyroidism-associated paresthesias',
-      ],
+      differentials: ['Alcohol-induced peripheral polyneuropathy', 'Vitamin B12 deficiency neuropathy', 'Chronic inflammatory demyelinating polyneuropathy (CIDP)', 'Peripheral arterial disease (PAD)'],
       icdCodes: [
-        { code: 'E11.40', title: 'Type 2 diabetes mellitus with diabetic neuropathy, unspecified', rule: 'Combination code for diabetic polyneuropathy.' },
-        { code: 'E11.65', title: 'Type 2 diabetes mellitus with hyperglycemia', rule: 'Assign if glucose control is elevated.' },
+        { code: 'E11.40', title: 'Type 2 diabetes mellitus with diabetic neuropathy, unspecified', rule: 'Combination code for diabetic neuropathy.' },
+        { code: 'E11.65', title: 'Type 2 diabetes mellitus with hyperglycemia', rule: 'Assign if current HbA1c is elevated (> 7.0%).' },
+        { code: 'R20.2', title: 'Paresthesia of skin', rule: 'Symptom code for tingling and burning sensations.' },
       ],
-      diagnostics: ['HbA1c testing and serum fasting lipid panel', 'Spot urine albumin-to-creatinine ratio and serum Creatinine/eGFR', 'Serum Vitamin B12 and TSH levels'],
+      diagnostics: ['Comprehensive Diabetic Foot Exam (10-g Semmes-Weinstein monofilament, 128-Hz tuning fork vibration)', 'Hemoglobin A1c (HbA1c), fasting lipid panel, serum creatinine with eGFR, and spot urine albumin-to-creatinine ratio (uACR)'],
       medications: [
-        'Neuropathic pain pharmacotherapy: Gabapentin 300 mg PO nightly (titrate to 300 mg TID) or Duloxetine 30–60 mg PO daily.',
-        'Glycemic optimization to target HbA1c < 7.0%.',
+        'First-line neuropathic analgesia: Pregabalin 75 mg PO BID or Duloxetine 30–60 mg PO daily or Gabapentin 300 mg PO TID titrated.',
+        'Glycemic optimization: Continue/titrate Metformin 1000 mg PO BID (monitor renal function) and consider SGLT2 inhibitor or GLP-1 RA.',
       ],
-      precautions: 'Perform daily visual inspection of feet, soles, and interdigital spaces. Prescribe protective diabetic footwear.',
-      redFlags: ['New open skin breakdown, foot ulcer, or non-healing callus', 'Signs of ascending cellulitis, erythema, or deep tissue infection (Charcot neuroarthropathy)'],
+      precautions: 'Daily visual inspection of feet with mirror; wear well-cushioned shoes; avoid walking barefoot.',
+      redFlags: ['Non-healing plantar ulcer or break in skin', 'Erythema, swelling, or localized warmth (concerning for Charcot foot or osteomyelitis)', 'Signs of acute infection (purulent drainage, foul odor)'],
     };
   }
 
-  // 11. Ankle Sprain / Musculoskeletal Trauma
-  if (lower.includes('ankle') || lower.includes('twisted') || lower.includes('sprain') || lower.includes('fall')) {
-    return {
-      name: 'Acute Ankle Inversion Injury (Lateral Ligament Sprain)',
-      differentials: ['Lateral malleolar fracture / Bimalleolar fracture', 'Fifth metatarsal base fracture (Jones fracture)', 'Syndesmotic (high ankle) sprain', 'Achilles tendon rupture'],
-      icdCodes: [
-        { code: 'S93.402A', title: 'Sprain of unspecified ligament of left ankle, initial encounter', rule: 'Use for acute left ankle injury.' },
-        { code: 'S93.401A', title: 'Sprain of unspecified ligament of right ankle, initial encounter', rule: 'Use for acute right ankle injury.' },
-      ],
-      diagnostics: [
-        'Ottawa Ankle Rules: Ankle radiographs indicated if tenderness at posterior lateral/medial malleolus OR inability to bear weight 4 steps.',
-        'Foot series if tenderness at base of 5th metatarsal or navicular bone.',
-      ],
-      medications: ['RICE Protocol: Rest, Ice (20 min intervals), Compression wrap, Elevation above heart level.', 'Oral NSAID: Ibuprofen 600 mg PO TID with meals x 5–7 days.'],
-      precautions: 'Weight-bearing as tolerated with supportive lace-up ankle brace or air-stirrup splint.',
-      redFlags: ['Gross bony deformity or neurovascular compromise', 'Inability to bear any weight despite analgesia', 'Loss of sensation in toes'],
-    };
-  }
-
-  // 12. Essential Hypertension / Elevated BP
-  if (lower.includes('hypertens') || lower.includes('high blood pressure') || lower.includes('bp 1') || lower.includes('bp: 1')) {
+  // 16. Essential Hypertension (Explicit diagnosis or Hypertensive Urgency only)
+  if (lower.includes('hypertens') || lower.includes('high blood pressure') || lower.includes('elevated blood pressure')) {
     return {
       name: 'Essential (Primary) Hypertension',
-      differentials: ['Secondary hypertension (renal artery stenosis, hyperaldosteronism, OSA)', 'White-coat hypertension', 'Hypertensive urgency (if BP > 180/120 without end-organ damage)'],
+      differentials: ['Secondary hypertension (renal artery stenosis, primary aldosteronism, obstructive sleep apnea)', 'White-coat hypertension', 'Hypertensive urgency (if SBP > 180 or DBP > 120 without end-organ damage)'],
       icdCodes: [
-        { code: 'I10', title: 'Essential (primary) hypertension', rule: 'Standard code for primary hypertension.' },
+        { code: 'I10', title: 'Essential (primary) hypertension', rule: 'Standard diagnostic code for primary hypertension.' },
+        { code: 'R03.0', title: 'Elevated blood-pressure reading, without diagnosis of hypertension', rule: 'Appropriate for isolated clinic blood pressure elevations.' },
       ],
-      diagnostics: ['Serum basic metabolic panel (BUN, Creatinine, Electrolytes)', 'Urinalysis for proteinuria', '12-lead ECG assessing for left ventricular hypertrophy (LVH)'],
+      diagnostics: ['Serial blood pressure measurements across at least two separate clinical encounters.', 'Laboratory workup: Serum electrolytes, BUN/Creatinine, lipid panel, fasting glucose, urinalysis, and baseline 12-lead ECG.'],
       medications: ['Initiate or titrate first-line antihypertensive therapy (e.g., Amlodipine 5 mg PO daily or Lisinopril 10 mg PO daily).', 'Lifestyle modification: Dietary Approaches to Stop Hypertension (DASH diet) and sodium restriction (< 2,000 mg/day).'],
       precautions: 'Home blood pressure monitoring twice daily (morning and evening); log readings for clinic review.',
       redFlags: ['Acute chest pain, severe shortness of breath, or headache with visual changes (hypertensive emergency)', 'Focal neurological deficits'],
     };
   }
 
-  // 13. Dynamic Universal Fallback for Any Other Case
+  // 17. Universal Symptom-Matched Fallback (Extracts exact clinical problem & anatomical site)
+  let fallbackName = 'Acute Clinical Evaluation';
+  let primaryIcd = { code: 'R69', title: 'Illness, unspecified', rule: 'Initial encounter diagnostic code.' };
+  let secondaryIcd = { code: 'Z00.00', title: 'Encounter for general medical examination', rule: 'General diagnostic and clinical review.' };
+
+  if (lower.includes('knee') || lower.includes('patell')) {
+    fallbackName = 'Acute Knee Arthralgia / Joint Derangement';
+    primaryIcd = { code: 'M25.561', title: 'Pain in right knee', rule: 'Assigned based on acute knee symptomatology.' };
+    secondaryIcd = { code: 'M25.461', title: 'Effusion, right knee', rule: 'Joint effusion code.' };
+  } else if (lower.includes('shoulder')) {
+    fallbackName = 'Acute Shoulder Arthralgia / Impingement Syndrome';
+    primaryIcd = { code: 'M25.511', title: 'Pain in right shoulder', rule: 'Symptom code for localized shoulder pain.' };
+    secondaryIcd = { code: 'M75.101', title: 'Unspecified rotator cuff tear or rupture of right shoulder', rule: 'Suspected soft tissue injury.' };
+  } else if (lower.includes('ankle') || lower.includes('foot')) {
+    fallbackName = 'Acute Ankle / Foot Sprain and Arthralgia';
+    primaryIcd = { code: 'S93.401A', title: 'Sprain of unspecified ligament of right ankle, initial encounter', rule: 'Primary ligamentous sprain code.' };
+    secondaryIcd = { code: 'M25.571', title: 'Pain in right ankle and joints of right foot', rule: 'Symptom code.' };
+  } else if (lower.includes('fever') || lower.includes('pyrexia') || lower.includes('chills')) {
+    fallbackName = 'Acute Febrile Syndrome of Undetermined Origin';
+    primaryIcd = { code: 'R50.9', title: 'Fever, unspecified', rule: 'Assigned for systemic temperature elevation.' };
+    secondaryIcd = { code: 'B34.9', title: 'Viral infection, unspecified', rule: 'Presumptive etiology.' };
+  } else if (lower.includes('cough')) {
+    fallbackName = 'Acute Cough / Upper Respiratory Tract Syndrome';
+    primaryIcd = { code: 'R05.9', title: 'Cough, unspecified', rule: 'Primary respiratory symptom code.' };
+    secondaryIcd = { code: 'J06.9', title: 'Acute upper respiratory infection, unspecified', rule: 'Presumptive viral illness.' };
+  } else if (lower.includes('rash') || lower.includes('dermatitis') || lower.includes('lesion') || lower.includes('pruritus')) {
+    fallbackName = 'Acute Dermatitis / Cutaneous Eruption';
+    primaryIcd = { code: 'R21', title: 'Rash and other nonspecific skin eruptions', rule: 'Primary dermatological presentation code.' };
+    secondaryIcd = { code: 'L30.9', title: 'Dermatitis, unspecified', rule: 'Inflammatory skin process.' };
+  } else if (lower.includes('dizziness') || lower.includes('vertigo') || lower.includes('lightheaded')) {
+    fallbackName = 'Acute Dizziness / Vestibular Dysfunction Syndrome';
+    primaryIcd = { code: 'R42', title: 'Dizziness and giddiness', rule: 'Primary symptom code for dysequilibrium.' };
+    secondaryIcd = { code: 'H81.10', title: 'Benign paroxysmal vertigo, unspecified ear', rule: 'Common peripheral vestibular etiology.' };
+  } else {
+    fallbackName = `Clinical Evaluation of ${text.split(/[.,\n]/)[0].slice(0, 70).trim()}`;
+  }
+
   return {
-    name: `Clinical Evaluation of ${text.split(/[.,\n]/)[0].slice(0, 80).trim()}`,
+    name: fallbackName,
     differentials: [
       'Primary presentation consistent with documented clinical symptoms',
-      'Secondary etiology to be ruled out through targeted diagnostic evaluation',
+      'Underlying inflammatory or mechanical etiology to be clarified with workup',
       'Systemic / infectious processes requiring laboratory correlation',
     ],
-    icdCodes: [
-      { code: 'R69', title: 'Illness, unspecified', rule: 'Initial encounter diagnostic code for active clinical presentation.' },
-      { code: 'Z00.00', title: 'Encounter for general adult medical examination without abnormal findings', rule: 'General diagnostic and clinical review.' },
+    icdCodes: [primaryIcd, secondaryIcd],
+    diagnostics: [
+      'Targeted laboratory evaluation tailored to chief complaint (CBC, CMP as indicated)',
+      'Diagnostic imaging per evidence-based appropriateness criteria based on symptom progression',
     ],
-    diagnostics: ['Targeted laboratory evaluation tailored to chief complaint (CBC, CMP as indicated)', 'Diagnostic imaging per evidence-based appropriateness criteria based on clinical progression'],
-    medications: ['Targeted symptom-directed pharmacotherapy with verification of patient allergies and renal/hepatic function.', 'Supportive measures and lifestyle adjustments.'],
+    medications: [
+      'Targeted symptom-directed pharmacotherapy with verification of patient allergies and renal/hepatic function.',
+      'Supportive measures, hydration, and activity modification as tolerated.',
+    ],
     precautions: 'Ensure adequate rest, hydration, and adherence to prescribed treatment regimen.',
-    redFlags: ['Acute worsening of presenting symptoms', 'Development of high fever, severe pain, or respiratory distress', 'Any new focal neurological deficits'],
+    redFlags: [
+      'Acute worsening of presenting symptoms',
+      'Development of high fever, severe pain, or respiratory distress',
+      'Any new focal neurological deficits or hemodynamic instability',
+    ],
   };
 }
 
